@@ -9,6 +9,8 @@ permissions:
   id-token: write
   contents: read # This is required for actions/checkout
 
+concurrency: pr-${{ github.ref }}
+
 jobs:
   clean-up:
     name: Undeploy PR (clean-up)
@@ -22,7 +24,6 @@ jobs:
     permissions:
       id-token: write
       contents: read # This is required for actions/checkout
-      deployments: write
 
     steps:
       - name: inject slug/short variables
@@ -44,10 +45,3 @@ jobs:
       - name: delete the App Runner service
         run: aws apprunner delete-service --service-arn arn:aws:apprunner:${{ secrets.AWS_REGION }}:${{ steps.aws-credentials.outputs.aws-account-id }}:service/app-review-${{ env.STAGE }}/ # seems working also without '${{ env.SERVICE_ID }}' at the end
 
-      - name: delete the github deployments and the corresponding environment
-        uses: bobheadxi/deployments@v1
-        with:
-          step: delete-env
-          token: ${{ secrets.GITHUB_TOKEN }}
-          env: ${{ env.STAGE }}
-          desc: Environment was deleted entirely

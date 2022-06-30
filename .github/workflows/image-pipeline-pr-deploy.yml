@@ -1,11 +1,13 @@
-name: PR Deploy to App Runner - Image based # Name of the workflow
+name: PR Deploy to App Runner - Image based
 
 on:
   pull_request:
     types: [labeled, opened, synchronize]
 
 env:
-  ECR_REPOSITORY: review-apps-aws
+  ECR_REPOSITORY: review-apps-aws-pr
+
+concurrency: pr-${{ github.ref }}
 
 jobs:
   deploy-on-pr:
@@ -19,7 +21,6 @@ jobs:
     permissions:
       id-token: write
       contents: read # This is required for actions/checkout
-      deployments: write
 
     steps:
       - name: inject slug/short variables
@@ -27,16 +28,6 @@ jobs:
 
       - name: set STAGE variable in environment for next steps
         run: echo "STAGE=pr-${{ github.event.number }}-${{ env.GITHUB_HEAD_REF_SLUG }}" >> $GITHUB_ENV
-
-      - name: create a github deployment
-        uses: bobheadxi/deployments@v1
-        id: deployment
-        with:
-          step: start
-          token: ${{ secrets.GITHUB_TOKEN }}
-          env: ${{ env.STAGE }}
-          ref: ${{ github.head_ref }}
-          override: true
 
       - name: checkout the files
         uses: actions/checkout@v3
@@ -79,17 +70,3 @@ jobs:
 
       - name: App Runner output
         run: echo "App runner output ${{ steps.deploy-apprunner.outputs.service-id }}"
-
-      - name: set SERVICE_ID variable in environment for next steps
-        run: echo "SERVICE_ID=${{ steps.deploy-apprunner.outputs.service-id }}" >> $GITHUB_ENV
-
-      - name: update the github deployment status
-        uses: bobheadxi/deployments@v1
-        if: always()
-        with:
-          step: finish
-          token: ${{ secrets.GITHUB_TOKEN }}
-          status: ${{ job.status }}
-          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
-          env: ${{ steps.deployment.outputs.env }}
-          env_url: https://console.aws.amazon.com/apprunner/home#/services

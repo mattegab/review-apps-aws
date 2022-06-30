@@ -1,4 +1,4 @@
-name: Deploy to App Runner - Image based - on push # Name of the workflow
+name: Deploy to App Runner - Image based - on push
 on:
   workflow_dispatch: # Allow manual invocation of the workflow
 # decomment the 2 lines below if you want an automatic deployment triggered on push to branch 'main'
@@ -12,6 +12,8 @@ env:
 permissions:
   id-token: write
   contents: read # This is required for actions/checkout
+
+concurrency: push-${{ github.ref }}
 
 jobs:
   deploy-on-push:
