@@ -126,7 +126,7 @@ Review apps each have a unique URL you can share, making them a great way to pro
 
 9. configure GitHub secrets within your GitHub repository, under *Settings* > *Secrets*
     ```
-    AWS_ROLE_TO_ASSUME --> enter in the ARN of the IAM role *review-apps-gihub-oidc-role*
+    AWS_ROLE_TO_ASSUME --> enter in the ARN of the IAM role *review-apps-github-oidc-role*
     AWS_REGION --> enter the Region where the App Runner service needs to be created (e.g. us-east-1)
     ROLE_ARN -->  enter in the ARN of the IAM role *app-runner-service-role*
     ```
@@ -141,7 +141,7 @@ Review apps each have a unique URL you can share, making them a great way to pro
 
 13. OPTIONAL: manually trigger a workflow as described in point 11
 
-14. create a label `Review App on AWS` ([instructions here](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels))
+14. create a label `Review App on AWS` for your repo ([instructions here](https://docs.github.com/en/issues/using-labels-and-milestones-to-track-work/managing-labels))
 
 15. apply the label to the Pull Request you want to deploy in App Runner with the label `Review App on AWS`, then the **[image-pipeline-pr-deploy.yml](.github/workflows/image-pipeline-pr-deploy.yml)** workflow will be automatically triggered
 
