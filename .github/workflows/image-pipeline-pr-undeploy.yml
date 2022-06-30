@@ -1,0 +1,53 @@
+name: "PR Undeploy App Runner - Image based"
+
+on:
+  pull_request:
+    types: [unlabeled, closed]
+
+# These permissions are needed to interact with GitHub's OIDC Token endpoint.
+permissions:
+  id-token: write
+  contents: read # This is required for actions/checkout
+
+jobs:
+  clean-up:
+    name: Undeploy PR (clean-up)
+
+    if: |
+      (github.event.action == 'unlabeled' && github.event.label.name == 'Review App on AWS') ||
+      (github.event.action == 'closed' && contains(github.event.pull_request.labels.*.name, 'Review App on AWS'))
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read # This is required for actions/checkout
+      deployments: write
+
+    steps:
+      - name: inject slug/short variables
+        uses: rlespinasse/github-slug-action@v4
+
+      - name: set STAGE variable in environment for next steps
+        run: echo "STAGE=pr-${{ github.event.number }}-${{ env.GITHUB_HEAD_REF_SLUG }}" >> $GITHUB_ENV
+
+      - name: checkout the files
+        uses: actions/checkout@v3
+
+      - name: configure AWS credentials
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: delete the App Runner service
+        run: aws apprunner delete-service --service-arn arn:aws:apprunner:${{ secrets.AWS_REGION }}:${{ steps.aws-credentials.outputs.aws-account-id }}:service/app-review-${{ env.STAGE }}/ # seems working also without '${{ env.SERVICE_ID }}' at the end
+
+      - name: delete the github deployments and the corresponding environment
+        uses: bobheadxi/deployments@v1
+        with:
+          step: delete-env
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: ${{ env.STAGE }}
+          desc: Environment was deleted entirely

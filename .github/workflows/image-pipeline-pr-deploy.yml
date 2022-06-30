@@ -1,0 +1,95 @@
+name: PR Deploy to App Runner - Image based # Name of the workflow
+
+on:
+  pull_request:
+    types: [labeled, opened, synchronize]
+
+env:
+  ECR_REPOSITORY: review-apps-aws
+
+jobs:
+  deploy-on-pr:
+    name: Deploy PR
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'Review App on AWS') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'Review App on AWS'))
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read # This is required for actions/checkout
+      deployments: write
+
+    steps:
+      - name: inject slug/short variables
+        uses: rlespinasse/github-slug-action@v4
+
+      - name: set STAGE variable in environment for next steps
+        run: echo "STAGE=pr-${{ github.event.number }}-${{ env.GITHUB_HEAD_REF_SLUG }}" >> $GITHUB_ENV
+
+      - name: create a github deployment
+        uses: bobheadxi/deployments@v1
+        id: deployment
+        with:
+          step: start
+          token: ${{ secrets.GITHUB_TOKEN }}
+          env: ${{ env.STAGE }}
+          ref: ${{ github.head_ref }}
+          override: true
+
+      - name: checkout the files
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        id: aws-credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Create ECR repo if missing
+        run: aws ecr describe-repositories --repository-names ${{ env.ECR_REPOSITORY }} || aws ecr create-repository --repository-name ${{ env.ECR_REPOSITORY }}
+
+      - name: Build, tag, and push image to Amazon ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Deploy to App Runner Image
+        id: deploy-apprunner
+        uses: awslabs/amazon-app-runner-deploy@main
+        with:
+          service: app-review-${{ env.STAGE }} # TODO to avoid eventual conflicts, include ref to username & repo (Warning: "Service name may only contain numbers, letters, dashes, and underscores; It must contain 4 to 40 characters.")
+          image: ${{ steps.build-image.outputs.image }}
+          access-role-arn: ${{ secrets.ROLE_ARN }}
+          region: ${{ secrets.AWS_REGION }}
+          cpu: 1
+          memory: 2
+          wait-for-service-stability: true
+
+      - name: App Runner output
+        run: echo "App runner output ${{ steps.deploy-apprunner.outputs.service-id }}"
+
+      - name: set SERVICE_ID variable in environment for next steps
+        run: echo "SERVICE_ID=${{ steps.deploy-apprunner.outputs.service-id }}" >> $GITHUB_ENV
+
+      - name: update the github deployment status
+        uses: bobheadxi/deployments@v1
+        if: always()
+        with:
+          step: finish
+          token: ${{ secrets.GITHUB_TOKEN }}
+          status: ${{ job.status }}
+          deployment_id: ${{ steps.deployment.outputs.deployment_id }}
+          env: ${{ steps.deployment.outputs.env }}
+          env_url: https://console.aws.amazon.com/apprunner/home#/services
